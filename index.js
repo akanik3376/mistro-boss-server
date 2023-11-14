@@ -1,7 +1,7 @@
 const express = require('express')
 const app = express()
 const cors = require('cors')
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config()
 
 const port = process.env.PORT || 5000
@@ -10,8 +10,6 @@ const port = process.env.PORT || 5000
 app.use(cors())
 app.use(express.json())
 
-console.log(process.env.DB_NAME)
-console.log(process.env.DB_PASS)
 
 const uri = `mongodb+srv://${process.env.DB_NAME}:${process.env.DB_PASS}@cluster0.vfr78tp.mongodb.net/?retryWrites=true&w=majority`;
 
@@ -44,6 +42,10 @@ async function run() {
             res.send(result)
         })
 
+
+
+        // ############***********#########
+
         // carts collections
         app.post('/carts', async (req, res) => {
             //body theke cartItem pacchi
@@ -52,8 +54,23 @@ async function run() {
             const result = await cartsCollection.insertOne(cartItem)
             res.send(result)
         })
+        // carts collections get
 
+        app.get('/carts', async (req, res) => {
+            const email = req.query.email
+            const query = { email: email }
+            const result = await cartsCollection.find(query).toArray()
+            res.send(result)
+        })
 
+        // delete user cart data
+        app.delete('/carts/:id', async (req, res) => {
+            const id = req.params.id
+            const query = { _id: new ObjectId(id) }
+            const result = await cartsCollection.deleteOne(query)
+            res.send(result)
+
+        })
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
