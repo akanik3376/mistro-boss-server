@@ -84,10 +84,32 @@ async function run() {
 
 
         // ############   product menu  #########
+
+        // only admin can post data
+        app.post('/menu', verifyToken, verifyAdmin, async (req, res) => {
+            const menuItem = req.body;
+
+            const result = await menuCollection.insertOne(menuItem)
+            res.send(result)
+        })
+
         app.get('/menu', async (req, res) => {
             const result = await menuCollection.find().toArray()
             res.send(result)
         })
+
+        ///admin delete item
+        app.delete('/menu/:id', async (req, res) => {
+            const id = req.params.id
+            const query = { _id: new ObjectId(id) }
+            const result = await menuCollection.deleteOne(query)
+            res.send(result)
+        })
+
+
+
+
+
         // ***************** users reviews us ************
         app.get('/reviews', async (req, res) => {
             const result = await reviewsCollection.find().toArray()
