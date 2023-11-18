@@ -32,8 +32,10 @@ async function run() {
 
         // data collections
         const menuCollection = client.db('bistroDb').collection('menu')
+
         //users reviews us
         const reviewsCollection = client.db('bistroDb').collection('reviews')
+
         // user add cart collections
         const cartsCollection = client.db('bistroDb').collection('carts')
 
@@ -93,16 +95,49 @@ async function run() {
             res.send(result)
         })
 
+        //get all menu data for all users
         app.get('/menu', async (req, res) => {
             const result = await menuCollection.find().toArray()
             res.send(result)
         })
 
+        // get single menu item base on id
+        app.get('/menu/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await menuCollection.findOne(query)
+            res.send(result)
+        })
+
+        // update menu item
+        app.patch('/menu/:id', async (req, res) => {
+            const id = req.params.id
+            const item = req.body;
+
+            const filter = { _id: new ObjectId(id) }
+            const updateOne = {
+                $set: {
+                    category: item.category,
+                    details: item.details,
+                    image: item.image,
+                    name: item.name,
+                    price: item.price
+                },
+            }
+            const result = await menuCollection.updateOne(filter, updateOne)
+            console.log(result)
+            res.send(result)
+        })
+
+
         ///admin delete item
         app.delete('/menu/:id', async (req, res) => {
             const id = req.params.id
+
             const query = { _id: new ObjectId(id) }
+
             const result = await menuCollection.deleteOne(query)
+
             res.send(result)
         })
 
