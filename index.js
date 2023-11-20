@@ -3,11 +3,18 @@ const app = express()
 const cors = require('cors')
 var jwt = require('jsonwebtoken');
 const { MongoClient, ServerApiVersion, ObjectId, Admin } = require('mongodb');
+const e = require('cors');
 require('dotenv').config()
+const stripe = require("stripe")(process.env.STRICK_SECRET_KEY)
 
 const port = process.env.PORT || 5000
 
-// middle ware  
+// middleware
+const corsOptions = {
+    origin: ['http://localhost:5173'],
+    credentials: true,
+    optionSuccessStatus: 200,
+}
 app.use(cors())
 app.use(express.json())
 
@@ -38,6 +45,9 @@ async function run() {
 
         // user add cart collections
         const cartsCollection = client.db('bistroDb').collection('carts')
+
+        // user payments collections
+        const paymentCollection = client.db('bistroDb').collection('payments')
 
 
         //$$$$$$$$$$$$ jwt api $$$$$$$$$$$$$$
@@ -238,6 +248,126 @@ async function run() {
                 admin = user.role === 'admin'
             }
             res.send({ admin })
+        })
+
+        // ***** Payment Method
+        app.post("/create-payment-intent", async (req, res) => {
+            const { price } = req.body;
+            console.log(price) //get price from body
+            if (price > 0) {
+                const amount = parseInt(price * 100) // do parseInt amount=1tk=100 poisha
+                console.log(amount)
+                const paymentIntent = await stripe.paymentIntents.create({
+                    amount: amount,
+                    currency: 'usd',
+                    payment_method_types: ['card']
+                })
+                res.send({
+                    clientSecret: paymentIntent.client_secret,
+                });
+            }
+
+
+        })
+
+        // payment api hare
+        app.post('/payments', async (req, res) => {
+            const payment = req.body;
+            const paymentResult = await paymentCollection.insertOne(payment)
+
+            // delete add cart item when payments successFull
+            const query = {
+                _id: {
+                    $in: payment.cardIds.map(id => new ObjectId(id))
+                }
+            }
+
+            const deleteResult = await cartsCollection.deleteMany(query)
+            res.send({ paymentResult, deleteResult })
+        })
+
+        // get payment history base on user email
+        app.get('/payments/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email }
+            // console.log(query)
+            if (req.params.email !== req.decoded.email) {
+                return res.status(403).send({ massage: 'authorization access' })
+            }
+            const result = await paymentCollection.find(query).toArray()
+            res.send(result)
+        })
+
+
+        // #####  Stats && analytic
+
+        app.get('/admin-stats', verifyToken, verifyAdmin, async (req, res) => {
+            const users = await userCollection.estimatedDocumentCount()
+            const menuItem = await menuCollection.estimatedDocumentCount()
+            const orders = await paymentCollection.estimatedDocumentCount()
+
+            //not the best way
+            // const payments = await paymentCollection.find().toArray()
+            // const payment = payments.reduce((total, payment) => total + payment.price, 0)
+
+            // best way
+            const result = await paymentCollection.aggregate([
+                {
+                    $group: { // for group id
+                        _id: null, // for get all data price
+                        totalRevenue: { // for sum all data price
+                            $sum: '$price'
+                        }
+                    }
+                }
+            ]).toArray()
+
+            const revenue = result?.length > 0 ? result[0].totalRevenue : 0
+
+            res.send({
+                users,
+                menuItem,
+                orders,
+                revenue
+            })
+        })
+
+        // using aggregated pipeline
+
+        app.get('/order-state', verifyToken, verifyAdmin, async (req, res) => {
+            const result = await paymentCollection.aggregate([
+                {
+                    $unwind: '$menuIds'
+                },
+                {
+                    $lookup: {
+                        from: 'menu',
+                        localField: 'menuIds',
+                        foreignField: '_id',
+                        as: 'menuItems'
+                    }
+                },
+                {
+                    $unwind: '$menuItems'
+                },
+                {
+                    $group: {
+                        _id: '$menuItems.category',
+                        quantity: { $sum: 1 },
+                        revenue: { $sum: '$menuItems.price' }
+                    }
+                }, {
+                    $project: {
+                        _id: 0,
+                        category: '$_id',
+                        quantity: '$quantity',
+                        revenue: '$revenue'
+                    }
+                }
+            ]).toArray()
+
+
+            res.send(result)
         })
 
         // Send a ping to confirm a successful connection
